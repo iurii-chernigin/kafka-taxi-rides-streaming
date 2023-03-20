@@ -1,16 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
-
-# import os
-# os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1,org.apache.spark:spark-avro_2.12:3.3.1 pyspark-shell'
-
 from pyspark.sql import SparkSession
-import pyspark.sql.functions as F
-import pyspark.sql.types as T
+import pyspark.sql.functions as fn
+from pyspark.sql.types import StringType
 from pyspark.sql import DataFrame
 from pyspark.sql.avro.functions import from_avro
 
-from settings import KAFKA_BOOTSTRAP_SERVER, SCHEMA_GREEN_RIDE, SCHEMA_REGISTRY_ADDRESS, SCHEMA_REGISTRY_KEY, SCHEMA_REGISTRY_SECRET, SCHEMA_REGISTRY_SECRET, SCHEMA_REGISTRY_OPTIONS, KAFKA_CLUSTER_KEY, KAFKA_CLUSTER_SECRET
+from settings import KAFKA_BOOTSTRAP_SERVER, SCHEMA_GREEN_RIDE, SCHEMA_REGISTRY_ADDRESS, SCHEMA_REGISTRY_KEY, SCHEMA_REGISTRY_SECRET, SCHEMA_REGISTRY_SECRET, SCHEMA_REGISTRY_OPTIONS, KAFKA_CLUSTER_KEY, KAFKA_CLUSTER_SECRET, SCHEMA_AVRO_GREEN_RIDE
 
 
 
@@ -28,6 +24,7 @@ def read_from_kafka(topic: str) -> DataFrame:
         .option("kafka.ssl.endpoint.identification.algorithm", "https")\
         .option("subscribe", topic)\
         .option("startingOffset", "latest")\
+        .option("failOnDataLoss", "false")\
         .option("checkpoingLocation", "checkpoint")\
         .load()
 
@@ -37,44 +34,44 @@ def parse_avro_events(df_stream: DataFrame) -> DataFrame:
     Parse AVRO events from a subscribed topic using Confluent schema registry
     :df_stream stream DataFrame with subscribtion to a Kafka topic
     """
-    assert df_stream.isStreaming is True, "DataFrame doesn't receive streaming data"
-    return df_stream.select(
-        from_avro(
-            data = F.col("key"),
-            options = SCHEMA_REGISTRY_OPTIONS,
-            subject = "t-key",
-            schemaRegistryAddress = SCHEMA_REGISTRY_ADDRESS
-        ).alias("key"),
-        from_avro(
-            data = F.col("value"),
-            options = SCHEMA_REGISTRY_OPTIONS,
-            subject = "t-value",
-            schemaRegistryAddress = SCHEMA_REGISTRY_ADDRESS
-        ).alias("value"),
-    )
+    # assert df_stream.isStreaming is True, "DataFrame doesn't receive streaming data"
+    # return df_stream.select(
+    #     from_avro(
+    #         fn.col("value"),
+    #         SCHEMA_AVRO_GREEN_RIDE,
+    #         {"mode": "PERMISSIVE"}
+    #         #options = SCHEMA_REGISTRY_OPTIONS,
+    #         #schemaRegistryAddress = SCHEMA_REGISTRY_ADDRESS
+    #     ).alias("rides")
+    # )
+    return df_stream\
+        .withColumn('key', fn.col("key").cast(StringType()))\
+        .withColumn('fixedValue', fn.expr("substring(value, 6, length(value)-5)"))\
+        .withColumn('valueSchemaId', binary_to_string(fn.expr("substring(value, 2, 4)")))\
+        .select('topic', 'partition', 'offset', 'timestamp', 'timestampType', 'key', 'valueSchemaId','fixedValue')
 
 
-def parse_json_events(df_stream: DataFame) -> DataFrame:
+def parse_json_events(df_stream: DataFrame) -> DataFrame:
     """
     Parse JSON events from a subscribed topic using Confluent schema registry
     :df_stream stream DataFrame with subscribtion to a Kafka topic
     """
     df = df_stream.selectExpr("CAST(key as STRING)", "CAST(value as STRING)")
-    col = F.split(df["key"], ",")
+    col = fn.split(df["key"], ",")
 
     for idx, field in enumerate(SCHEMA_GREEN_RIDE):
-        df = df.withColumn(field.name, col.getItem(idx).cast(field.dataType))
+        df = dfn.withColumn(field.name, col.getItem(idx).cast(field.dataType))
 
-    return df.select([field.name for field in SCHEMA_GREEN_RIDE])
+    return dfn.select([field.name for field in SCHEMA_GREEN_RIDE])
 
 
 if __name__ == "__main__":
+
     spark = SparkSession.builder.appName("Spark-Notebook").getOrCreate()
+    binary_to_string = fn.udf(lambda x: str(int.from_bytes(x, byteorder='big')), StringType())
 
     df_stream = read_from_kafka("rides_green")
-    print(df_stream.printSchema())
     df_rides = parse_avro_events(df_stream)
-
 
     df_rides.writeStream\
         .outputMode("append")\

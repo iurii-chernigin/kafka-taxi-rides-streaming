@@ -6,17 +6,33 @@ OUTPUT_TOPIC_TOP_PICKUP_LOCATION = ""
 INPUT_TOPIC_GREEN_RIDES = "rides_green"
 INPUT_TOPIC_FHV_RIDES = "rids_fhv"
 
-KAFKA_BOOTSTRAP_SERVER = "<dns>:9092"
-KAFKA_CLUSTER_KEY = ""
+
+KAFKA_BOOTSTRAP_SERVER = ""
+KAFKA_CLUSTER_KEY = "
 KAFKA_CLUSTER_SECRET = ""
 
 
-SCHEMA_REGISTRY_ADDRESS = "https://<dns>"
+SCHEMA_REGISTRY_ADDRESS = ""
 SCHEMA_REGISTRY_KEY = ""
 SCHEMA_REGISTRY_SECRET = "" 
 SCHEMA_REGISTRY_OPTIONS = {
   "confluent.schema.registry.basic.auth.credentials.source": 'USER_INFO',
   "confluent.schema.registry.basic.auth.user.info": "{}:{}".format(SCHEMA_REGISTRY_KEY, SCHEMA_REGISTRY_SECRET)
+}
+
+
+SCHEMA_AVRO_GREEN_RIDE = {
+    "type": "record",
+    "name": "GreenRideRecord",
+    "namespace": "schemaregistry",
+    "fields": [
+        {"name": "pickup_datetime", "type": "string"},
+        {"name": "dropoff_datetime", "type": "string"},
+        {"name": "vendor_id", "type": "string"},
+        {"name": "pickup_location_id", "type": "int"},
+        {"name": "dropoff_location_id", "type": "int"},
+        {"name": "sended_to_kafka_ts", "type": "int"}
+    ]
 }
 
 
